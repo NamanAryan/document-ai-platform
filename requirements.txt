@@ -1,0 +1,15 @@
+langchain
+langchain-community
+langchain-core
+langchain-ollama
+langchain-google-genai
+langchain-chroma
+chromadb
+ollama
+google-generativeai
+pypdf
+python-docx
+python-dotenv
+fastapi
+uvicorn[standard]
+python-multipart

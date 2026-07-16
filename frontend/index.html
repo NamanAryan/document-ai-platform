@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DocAIApp</title>
+    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css?v=5">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                    <polyline points="2 17 12 22 22 17"></polyline>
+                    <polyline points="2 12 12 17 22 12"></polyline>
+                </svg>
+                <h2>DocAIApp</h2>
+            </div>
+            
+            <div class="sidebar-section">
+                <h3 class="section-title">UPLOAD DOCUMENT</h3>
+                <button id="upload-btn" class="upload-btn">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    Upload File
+                </button>
+                <input type="file" id="file-input" hidden accept=".pdf,.txt,.md,.docx,.csv" />
+                <p id="upload-status" class="upload-status hidden">File indexed successfully.</p>
+            </div>
+
+            <div class="sidebar-section" id="analytics-section">
+                <h3 class="section-title">ANALYTICS</h3>
+                <div class="analytics-card">
+                    <div class="analytics-stat">
+                        <span class="stat-value" id="stat-docs">0</span>
+                        <span class="stat-label">Documents</span>
+                    </div>
+                    <div class="analytics-stat">
+                        <span class="stat-value" id="stat-pages">0</span>
+                        <span class="stat-label">Pages</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="section-header">
+                    <h3 class="section-title">KNOWLEDGE BASE</h3>
+                    <button id="refresh-docs-btn" class="icon-btn">
+                        <svg class="refresh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="23 4 23 10 17 10"></polyline>
+                            <polyline points="1 20 1 14 7 14"></polyline>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                        </svg>
+                    </button>
+                </div>
+                <ul id="document-list" class="document-list">
+                    <!-- Populated via JS -->
+                </ul>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="pattern-overlay"></div>
+            
+            <div id="loading-overlay" class="loading-overlay hidden">
+                <div class="loading-content">
+                    <p id="loading-question" class="loading-question"></p>
+                    <div class="loading-bar-container">
+                        <div class="loading-bar"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="chat-history" class="chat-history">
+                <!-- Empty State -->
+                <div id="empty-state" class="empty-state hidden">
+                    <div class="empty-state-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <line x1="12" y1="18" x2="12" y2="12"></line>
+                            <line x1="9" y1="15" x2="15" y2="15"></line>
+                        </svg>
+                    </div>
+                    <h3>Select or upload a document to ask questions</h3>
+                </div>
+
+                <!-- Initial State: FAQs -->
+                <div id="faq-container" class="faq-container hidden">
+                    <div class="faq-header">
+                        <h3 class="faq-title">Frequently Asked Questions</h3>
+                        <span id="faq-spinner" class="spinner small hidden" title="Generating dynamic questions..."></span>
+                    </div>
+                    <div class="faq-grid" id="faq-grid">
+                    </div>
+                </div>
+                <!-- Chat messages will be injected here -->
+            </div>
+
+            <!-- Input Area -->
+            <div class="input-area">
+                <div class="input-container">
+                    <input type="text" id="question-input" placeholder="Ask about your documents...">
+                    <button id="send-btn" class="send-btn">
+                        <svg class="send-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="22" y1="2" x2="11" y2="13"></line>
+                            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <!-- Template for user message -->
+    <template id="user-msg-template">
+        <div class="message user-message">
+            <div class="message-bubble"></div>
+            <div class="user-avatar">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+            </div>
+        </div>
+    </template>
+
+    <!-- Template for bot message -->
+    <template id="bot-msg-template">
+        <div class="message bot-message">
+            <div class="bot-avatar">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                    <polyline points="2 17 12 22 22 17"></polyline>
+                    <polyline points="2 12 12 17 22 12"></polyline>
+                </svg>
+            </div>
+            <div class="message-bubble">
+                <div class="bot-content"></div>
+                <div class="source-section hidden">
+                    <div class="source-divider"></div>
+                    <div class="source-label">SOURCE</div>
+                    <div class="source-list"></div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- Script loaded at end -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="/static/script.js?v=4"></script>
+</body>
+</html>

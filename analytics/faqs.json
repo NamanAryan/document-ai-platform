@@ -1,0 +1,23 @@
+{
+    "faqs": {
+        "Marksheet_NamanAryan.pdf": [],
+        "__global__": [
+            "What is the purpose behind creating 'Football Rules'?",
+            "How do I understand what should happen and consequences if something unexpected occurs according to these rules?",
+            "Where can official wording be found for specific situations mentioned in the simplified football rules?",
+            "Who contributed to ensuring that the Football Rules reflect stakeholders\u2019 needs?"
+        ],
+        "Policy-Document_LIC-s_New-Jeevan_Amar.pdf": [
+            "What is LIC's New Jeevan Amar policy?",
+            "How can I exercise options available under my life insurance plan if any are mentioned in the document?",
+            "What should be done during a disagreement with terms and conditions of an insurance policy, specifically for this new product from LIC?",
+            "Can you explain what is meant by 'Free Look Period' as per the provided documents?"
+        ],
+        "Leave_Policy_2026-27.pdf": [
+            "What are the eligibility criteria for leave under Datopic Technologies' policy?",
+            "How does this policy ensure compliance with Indian labor laws, and what exceptions exist if any?",
+            "Can employees avail of casual leaves without prior manager approval according to the document provided?",
+            "Is there a provision in the policy that allows for flexible work hours?"
+        ]
+    }
+}
