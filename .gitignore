@@ -1,52 +1,106 @@
-
+# =========================
+# Python
+# =========================
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyo
+*.pyd
 
-
+# =========================
+# Virtual Environments
+# =========================
 venv/
 .venv/
 env/
 
-
+# =========================
+# Environment Variables
+# =========================
 .env
+.env.*
 
-
+# =========================
+# IDEs
+# =========================
 .vscode/
 .idea/
 
-
+# =========================
+# macOS / Windows
+# =========================
 .DS_Store
 Thumbs.db
 
-
+# =========================
+# Logs
+# =========================
 *.log
 
-
+# =========================
+# Chroma Vector Database
+# =========================
 chroma_db/
 .chroma/
 
+# =========================
+# Python Testing
+# =========================
+.pytest_cache/
+.coverage
+htmlcov/
 
+# =========================
+# Python Build Files
+# =========================
 build/
 dist/
 *.egg-info/
+*.whl
+.python-version
 
-
+# =========================
+# Jupyter
+# =========================
 .ipynb_checkpoints/
 
+# =========================
+# Temporary Files
+# =========================
+*.tmp
+*.temp
+*.bak
+*.swp
 
+# =========================
+# Executables
+# =========================
 *.exe
 *.app
 *.jar
 *.war
 
-
+# =========================
+# Test Reports
+# =========================
 TEST*.xml
 
+# =========================
+# Media Files (Optional)
+# Uncomment if needed
+# =========================
+# *.mp4
+# *.avi
+# *.mov
+# *.wmv
+# *.flv
+# *.tiff
 
-*.mp4
-*.tiff
-*.avi
-*.flv
-*.mov
-*.wmv
+# =========================
+# Uploaded Documents
+# Uncomment only if your documents
+# contain confidential/company data.
+# Leave commented if you include
+# sample PDFs for demonstration.
+# =========================
+# documents/
