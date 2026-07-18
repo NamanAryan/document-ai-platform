@@ -8,13 +8,13 @@ Index your PDF, DOCX, and TXT documents from a local folder, then ask natural-la
 
 ## Features
 
-- 📄 **Multi-format ingestion** — PDF, DOCX, TXT with automatic detection
-- 🧩 **Smart chunking** — Paragraph- and sentence-aware text splitting with configurable overlap
-- 🔍 **Vector search** — ChromaDB-backed similarity search with persistent storage
-- 🤖 **Dual LLM support** — Ollama (local, private) with automatic Google Gemini fallback
-- 💬 **Interactive chat** — REPL mode for conversational Q&A sessions
-- 🔄 **Deduplication** — Skips already-indexed files based on path and modification time
-- 🎨 **Rich terminal output** — Spinners, tables, and coloured output via `rich`
+-  **Multi-format ingestion** — PDF, DOCX, TXT with automatic detection
+-  **Smart chunking** — Paragraph- and sentence-aware text splitting with configurable overlap
+-  **Vector search** — ChromaDB-backed similarity search with persistent storage
+-  **Dual LLM support** — Ollama (local, private) with automatic Google Gemini fallback
+-  **Interactive chat** — REPL mode for conversational Q&A sessions
+-  **Deduplication** — Skips already-indexed files based on path and modification time
+-  **Rich terminal output** — Spinners, tables, and coloured output via `rich`
 
 ---
 
