@@ -1,120 +1,101 @@
-# DocAIApp
+# Document AI Platform
 
-A **local-first, CLI-based AI document Q&A application** powered by LangChain, ChromaDB, and Ollama (with Google Gemini fallback).
+An intelligent Retrieval-Augmented Generation (RAG) application that allows users to upload documents and ask natural language questions about their content. The platform performs semantic search over uploaded documents and generates context-aware responses with source citations using a locally hosted Large Language Model (LLM).
 
-Index your PDF, DOCX, and TXT documents from a local folder, then ask natural-language questions — all from the terminal.
+---
+
+## Overview
+
+Organizations often manage hundreds of pages of manuals, policies, technical documents, and reports. Finding specific information manually can be slow and inefficient.
+
+Document AI Platform solves this problem by converting uploaded documents into searchable semantic embeddings, allowing users to retrieve information instantly using natural language queries.
+
+Unlike traditional keyword search, this application understands the meaning of a question and retrieves the most relevant document sections before generating an answer.
 
 ---
 
 ## Features
 
--  **Multi-format ingestion** — PDF, DOCX, TXT with automatic detection
--  **Smart chunking** — Paragraph- and sentence-aware text splitting with configurable overlap
--  **Vector search** — ChromaDB-backed similarity search with persistent storage
--  **Dual LLM support** — Ollama (local, private) with automatic Google Gemini fallback
--  **Interactive chat** — REPL mode for conversational Q&A sessions
--  **Deduplication** — Skips already-indexed files based on path and modification time
--  **Rich terminal output** — Spinners, tables, and coloured output via `rich`
+- Upload PDF, DOCX and TXT documents
+- Semantic document search using vector embeddings
+- Retrieval-Augmented Generation (RAG)
+- Local vector database using ChromaDB
+- Context-aware question answering
+- Real-time streaming responses
+- Source citation for every generated answer
+- Local-first architecture for improved privacy
+- Analytics Dashboard
+  - Total Documents Processed
+  - Total Pages Analysed
+  - Frequently Asked Questions
+  - Search Statistics
 
 ---
 
-## Prerequisites
+## System Architecture
 
-| Requirement | Notes |
-|---|---|
-| **Python 3.10+** | Required for `type \| None` syntax |
-| **Ollama** (recommended) | Install from [ollama.com](https://ollama.com). Pull models: `ollama pull llama3` and `ollama pull nomic-embed-text` |
-| **Google Gemini API key** (optional) | Fallback LLM if Ollama is unavailable. Get a key at [ai.google.dev](https://ai.google.dev) |
-
----
-
-## Installation
-
-```bash
-# 1. Clone or navigate to the project directory
-cd docaiapp
-
-# 2. Create and activate a virtual environment
-python -m venv venv
-venv\Scripts\activate        # Windows
-# source venv/bin/activate   # macOS / Linux
-
-# 3. Install dependencies
-pip install -r requirements.txt
-
-# 4. Configure environment variables
-copy .env.example .env       # Windows
-# cp .env.example .env       # macOS / Linux
-
-# 5. Edit .env with your settings (especially GEMINI_API_KEY if not using Ollama)
 ```
-
-### Ollama Setup
-
-```bash
-# Install Ollama, then pull the required models:
-ollama pull llama3            # Chat / generation model
-ollama pull nomic-embed-text  # Embedding model
-
-# Verify Ollama is running:
-ollama list
+                User
+                  │
+                  ▼
+        HTML / CSS / JavaScript
+                  │
+                  ▼
+             FastAPI Backend
+        ┌──────────┴──────────┐
+        │                     │
+        ▼                     ▼
+Document Upload         User Question
+        │                     │
+        ▼                     ▼
+Document Loader       Query Embedding
+        │                     │
+        ▼                     ▼
+ Text Chunking         Vector Search
+        │                     │
+        ▼                     ▼
+Embedding Generation  Retrieve Top K Chunks
+        │                     │
+        └──────────┬──────────┘
+                   ▼
+              LangChain RAG
+                   │
+                   ▼
+              Ollama LLM
+                   │
+                   ▼
+        Response + Source Citation
+                   │
+                   ▼
+               Frontend
 ```
 
 ---
 
-## Configuration
+## Tech Stack
 
-All settings are controlled via the `.env` file:
+### Backend
 
-| Variable | Default | Description |
-|---|---|---|
-| `GEMINI_API_KEY` | *(none)* | Google Gemini API key (fallback LLM) |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
-| `OLLAMA_MODEL` | `llama3` | Ollama model for generation |
-| `OLLAMA_EMBEDDING_MODEL` | `nomic-embed-text` | Ollama model for embeddings |
-| `CHROMA_PERSIST_DIR` | `./chroma_db` | ChromaDB persistence directory |
-| `CHUNK_SIZE` | `500` | Max characters per text chunk |
-| `CHUNK_OVERLAP` | `50` | Overlap between chunks |
-| `TOP_K_RESULTS` | `5` | Number of chunks retrieved per query |
-| `DOCS_DIR` | `./documents` | Default document scan directory |
+- Python
+- FastAPI
+- LangChain
+- ChromaDB
 
----
+### Frontend
 
-## Usage
+- HTML
+- CSS
+- JavaScript
 
-### Index Documents
+### AI
 
-Scan a local folder and index all supported documents:
+- Ollama
+- Local Embedding Model
+- Retrieval-Augmented Generation (RAG)
 
-```bash
-# Index from a specific folder
-python main.py index --path /path/to/your/documents
+### Database
 
-# Index from the default DOCS_DIR (set in .env)
-python main.py index
-```
-
-Already-indexed files are automatically skipped. Modified files are re-indexed.
-
-### List Indexed Documents
-
-```bash
-python main.py list
-```
-
-### Ask a Question
-
-```bash
-python main.py ask "What are the key findings in the report?"
-```
-
-### Interactive Chat
-
-```bash
-python main.py chat
-```
-
-Type questions at the `You:` prompt. Type `exit` or `quit` (or press `Ctrl+C`) to leave.
+- ChromaDB Vector Database
 
 ---
 
@@ -122,49 +103,159 @@ Type questions at the `You:` prompt. Type `exit` or `quit` (or press `Ctrl+C`) t
 
 ```
 docaiapp/
-├── main.py                  # CLI entry point (argparse + rich)
+
+├── app.py
+├── analytics/
+├── frontend/
 ├── ingestion/
-│   ├── loader.py            # PDF, DOCX, TXT loading
-│   ├── chunker.py           # Text splitting with overlap
-│   └── embedder.py          # Ollama embedding wrapper
+│   ├── loader.py
+│   ├── chunker.py
+│   └── embedder.py
 ├── retrieval/
-│   ├── vector_store.py      # ChromaDB storage & search
-│   └── retriever.py         # Similarity retrieval
 ├── generation/
-│   ├── llm.py               # Ollama + Gemini fallback
-│   └── chain.py             # LangChain RAG chain
+├── documents/
+├── chroma_db/
 ├── utils/
-│   └── config.py            # .env loader & settings singleton
 ├── tests/
-│   └── test_pipeline.py     # End-to-end integration test
-├── .env.example
-├── requirements.txt
-└── README.md
+└── requirements.txt
 ```
 
 ---
 
-## Running Tests
+## How It Works
+
+### 1. Document Upload
+
+- User uploads a document.
+- The document loader extracts its contents.
+- Text is divided into overlapping chunks.
+- Each chunk is converted into vector embeddings.
+- Embeddings and metadata are stored inside ChromaDB.
+
+---
+
+### 2. Question Answering
+
+- User submits a natural language question.
+- The question is converted into an embedding.
+- ChromaDB retrieves the most relevant chunks.
+- LangChain constructs the prompt.
+- Ollama generates an answer using only the retrieved context.
+- The answer and source citations are streamed back to the frontend.
+
+---
+
+## Installation
+
+Clone the repository
 
 ```bash
-python tests/test_pipeline.py
+git clone https://github.com/alonasingh/document-ai-platform.git
+cd document-ai-platform
 ```
 
-This creates temporary test files, runs the full pipeline (load → chunk → embed → ask), and verifies the output.
+Create a virtual environment
+
+```bash
+python3 -m venv venv
+```
+
+Activate it
+
+### macOS / Linux
+
+```bash
+source venv/bin/activate
+```
+
+### Windows
+
+```bash
+venv\Scripts\activate
+```
+
+Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
 
 ---
 
-## Troubleshooting
+## Install Ollama
 
-| Issue | Solution |
-|---|---|
-| `ConnectionError` on indexing | Ensure Ollama is running: `ollama serve` |
-| `RuntimeError: Neither Ollama nor Gemini` | Start Ollama or set `GEMINI_API_KEY` in `.env` |
-| `No documents indexed yet` | Run `python main.py index --path <folder>` first |
-| Encrypted PDF errors | Only PDFs with empty or no passwords are supported |
+Download and install Ollama
+
+https://ollama.com/download
+
+Pull the required model
+
+```bash
+ollama pull llama3.2
+```
+
+Start Ollama
+
+```bash
+ollama serve
+```
 
 ---
 
-## License
+## Run the Application
 
-This project is provided as-is for educational and personal use.
+Start FastAPI
+
+```bash
+uvicorn app:main --reload
+```
+
+Open your browser
+
+```
+http://localhost:8000
+```
+
+---
+
+## Future Improvements
+
+- Cloud vector database support
+- Background indexing using Celery
+- Multi-user authentication
+- Role-based access control
+- Document versioning
+- OCR support for scanned PDFs
+- Cloud deployment
+- Enterprise-scale monitoring
+- Distributed vector search
+- Caching frequently asked queries
+
+---
+
+## Learning Outcomes
+
+This project provided hands-on experience with:
+
+- Retrieval-Augmented Generation (RAG)
+- FastAPI backend development
+- LangChain orchestration
+- Vector databases
+- Semantic search
+- LLM integration
+- REST APIs
+- Streaming responses
+- Prompt engineering
+- AI application architecture
+
+---
+
+## Author
+
+**Alona Singh**
+
+B.Tech Information Technology
+
+Manipal Institute of Technology
+
+GitHub: https://github.com/alonasingh
