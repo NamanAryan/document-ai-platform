@@ -94,18 +94,267 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // --- Analytics -------------------------------------------------------
+
+    const analyticsModal = document.getElementById('analytics-modal');
+    const analyticsBody = document.getElementById('analytics-body');
+    const analyticsMoreBtn = document.getElementById('analytics-more');
+    const analyticsCloseBtn = document.getElementById('analytics-close');
+
+    function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[c]);
+    }
+
+    function fmtNum(n) {
+        if (n === null || n === undefined) return '—';
+        if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+        if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+        if (n >= 1e4) return (n / 1e3).toFixed(1) + 'k';
+        return String(n);
+    }
+
+    function fmtBytes(bytes) {
+        if (!bytes) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB'];
+        let i = 0;
+        let value = bytes;
+        while (value >= 1024 && i < units.length - 1) { value /= 1024; i++; }
+        return `${value < 10 && i > 0 ? value.toFixed(1) : Math.round(value)} ${units[i]}`;
+    }
+
+    function fmtMs(ms) {
+        if (!ms) return '—';
+        return ms >= 1000 ? `${(ms / 1000).toFixed(2)} s` : `${Math.round(ms)} ms`;
+    }
+
+    function fmtDate(iso) {
+        if (!iso) return '—';
+        const d = new Date(iso);
+        if (isNaN(d)) return '—';
+        return d.toLocaleString(undefined, {
+            year: 'numeric', month: 'short', day: 'numeric',
+            hour: '2-digit', minute: '2-digit'
+        });
+    }
+
     async function fetchAnalytics() {
         try {
             const res = await fetch('/analytics');
             if (res.ok) {
                 const data = await res.json();
-                document.getElementById('stat-docs').textContent = data.total_documents;
-                document.getElementById('stat-pages').textContent = data.total_pages;
+                renderAnalyticsSummary(data);
+                if (analyticsModal && !analyticsModal.classList.contains('hidden')) {
+                    renderDiagnostics(data);
+                }
             }
         } catch (err) {
             console.error('Failed to fetch analytics', err);
         }
     }
+
+    function renderAnalyticsSummary(data) {
+        const totals = data.totals || {};
+        const queries = data.queries || {};
+        const set = (id, value) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = value;
+        };
+        set('stat-docs', fmtNum(totals.documents ?? data.total_documents ?? 0));
+        set('stat-pages', fmtNum(totals.pages ?? data.total_pages ?? 0));
+        set('stat-chunks', fmtNum(totals.chunks ?? 0));
+        set('stat-tokens', fmtNum(totals.tokens_est ?? 0));
+        set('stat-index', fmtBytes(totals.index_size_bytes ?? 0));
+        set('stat-queries', fmtNum(queries.total_queries ?? 0));
+    }
+
+    function row(key, value) {
+        return `<div class="diag-row"><span class="diag-key">${escapeHtml(key)}</span>` +
+               `<span class="diag-val">${escapeHtml(value)}</span></div>`;
+    }
+
+    function renderHistogram(histogram) {
+        if (!histogram || !histogram.length) return '';
+        const max = Math.max(...histogram.map(b => b.count), 1);
+        const bars = histogram.map(b => {
+            const pct = (b.count / max) * 100;
+            return `<div class="hist-col" title="${b.start}–${b.end} chars: ${b.count} chunk(s)">
+                        <span class="hist-count">${b.count || ''}</span>
+                        <div class="hist-bar ${b.count ? '' : 'empty'}" style="height:${b.count ? Math.max(pct, 3) : 2}%"></div>
+                    </div>`;
+        }).join('');
+        const ticks = histogram.map(b => `<span class="hist-tick">${b.start}</span>`).join('');
+        return `<div class="diag-hist">${bars}</div><div class="hist-axis">${ticks}</div>
+                <p class="diag-note">Chunk length in characters — buckets span 0 to the configured chunk size.</p>`;
+    }
+
+    function renderDiagnostics(data) {
+        if (!analyticsBody) return;
+
+        const totals = data.totals || {};
+        const pipe = data.pipeline || {};
+        const chunking = data.chunking || {};
+        const dist = chunking.distribution;
+        const queries = data.queries || {};
+        const docs = data.documents || [];
+
+        const sections = [];
+
+        // Corpus totals
+        sections.push(`
+            <div class="diag-section">
+                <div class="diag-heading">Corpus</div>
+                <div class="diag-kv">
+                    ${row('Documents', totals.documents ?? 0)}
+                    ${row('Pages', totals.pages ?? 0)}
+                    ${row('Chunks / vectors', totals.chunks ?? 0)}
+                    ${row('Avg chunks / doc', totals.avg_chunks_per_doc ?? 0)}
+                    ${row('Characters indexed', (totals.characters ?? 0).toLocaleString())}
+                    ${row('Tokens (est. chars/4)', (totals.tokens_est ?? 0).toLocaleString())}
+                    ${row('Source files on disk', fmtBytes(totals.source_bytes))}
+                    ${row('Vector index on disk', fmtBytes(totals.index_size_bytes))}
+                </div>
+            </div>`);
+
+        // Pipeline configuration
+        sections.push(`
+            <div class="diag-section">
+                <div class="diag-heading">Pipeline</div>
+                <div class="diag-kv">
+                    ${row('Chunk size', `${pipe.chunk_size} chars`)}
+                    ${row('Chunk overlap', `${pipe.chunk_overlap} (${pipe.overlap_pct}%)`)}
+                    ${row('Splitter', pipe.splitter)}
+                    ${row('Separators', (pipe.separators || []).map(s => `"${s}"`).join(' → '))}
+                    ${row('Top-K retrieved', pipe.top_k)}
+                    ${row('Distance metric', pipe.distance_metric)}
+                    ${row('Embedding model', pipe.embedding_model)}
+                    ${row('Embedding dims', pipe.embedding_dimensions ?? '—')}
+                    ${row('LLM backend', pipe.llm_backend)}
+                    ${row('LLM model', pipe.llm_model)}
+                    ${row('Temperature', pipe.temperature ?? '—')}
+                    ${row('Collection', pipe.collection)}
+                </div>
+                <div class="diag-row" style="margin-top:6px">
+                    <span class="diag-key">Persist dir</span>
+                    <span class="diag-val">${escapeHtml(pipe.persist_dir || '—')}</span>
+                </div>
+            </div>`);
+
+        // Chunk size distribution
+        sections.push(`
+            <div class="diag-section">
+                <div class="diag-heading">Chunk size distribution</div>
+                ${dist ? `
+                    <div class="diag-kv" style="margin-bottom:14px">
+                        ${row('Min', `${dist.min} chars`)}
+                        ${row('Median (p50)', `${dist.p50} chars`)}
+                        ${row('Mean', `${dist.mean} chars`)}
+                        ${row('p95', `${dist.p95} chars`)}
+                        ${row('Max', `${dist.max} chars`)}
+                        ${row('Fill ratio', `${Math.round((dist.mean / (pipe.chunk_size || 1)) * 100)}% of chunk size`)}
+                    </div>
+                    ${renderHistogram(chunking.histogram)}
+                ` : '<p class="diag-empty">No chunks indexed yet.</p>'}
+            </div>`);
+
+        // Per-document breakdown
+        const docRows = docs.map(d => `
+            <tr>
+                <td class="diag-name">${escapeHtml(d.filename)}</td>
+                <td>${escapeHtml(d.file_type)}</td>
+                <td>${d.pages || '—'}</td>
+                <td>${d.chunks}</td>
+                <td>${(d.characters || 0).toLocaleString()}</td>
+                <td>${d.avg_chunk_chars}</td>
+                <td>${fmtBytes(d.size_bytes)}</td>
+                <td>${escapeHtml(fmtDate(d.indexed_at))}</td>
+            </tr>`).join('');
+
+        sections.push(`
+            <div class="diag-section">
+                <div class="diag-heading">Documents (${docs.length})</div>
+                ${docs.length ? `
+                    <table class="diag-table">
+                        <thead><tr>
+                            <th>File</th><th>Type</th><th>Pages</th><th>Chunks</th>
+                            <th>Chars</th><th>Avg</th><th>Size</th><th>Indexed</th>
+                        </tr></thead>
+                        <tbody>${docRows}</tbody>
+                    </table>
+                    <p class="diag-note">Pages are reported by the PDF reader; TXT and DOCX files have no page count.</p>
+                ` : '<p class="diag-empty">No documents indexed yet.</p>'}
+            </div>`);
+
+        // Retrieval / query telemetry
+        const topRows = (queries.top_questions || []).map(q => `
+            <tr><td class="diag-name">${escapeHtml(q.question)}</td><td>${q.count}</td></tr>`).join('');
+        const recentRows = (queries.recent || []).slice(0, 5).map(q => `
+            <tr>
+                <td class="diag-name">${escapeHtml(q.question)}</td>
+                <td>${escapeHtml(fmtMs(q.latency_ms))}</td>
+                <td>${q.chunks_retrieved}</td>
+                <td>${escapeHtml(fmtDate(q.at))}</td>
+            </tr>`).join('');
+
+        sections.push(`
+            <div class="diag-section">
+                <div class="diag-heading">Retrieval &amp; latency</div>
+                <div class="diag-kv" style="margin-bottom:14px">
+                    ${row('Queries answered', queries.total_queries ?? 0)}
+                    ${row('Logged (rolling)', queries.logged_queries ?? 0)}
+                    ${row('Mean latency', fmtMs(queries.avg_latency_ms))}
+                    ${row('Median (p50)', fmtMs(queries.p50_latency_ms))}
+                    ${row('p95 latency', fmtMs(queries.p95_latency_ms))}
+                    ${row('Slowest', fmtMs(queries.max_latency_ms))}
+                    ${row('Avg chunks used', queries.avg_chunks_retrieved ?? 0)}
+                </div>
+                ${topRows ? `
+                    <table class="diag-table" style="margin-bottom:16px">
+                        <thead><tr><th>Most asked</th><th>Count</th></tr></thead>
+                        <tbody>${topRows}</tbody>
+                    </table>` : ''}
+                ${recentRows ? `
+                    <table class="diag-table">
+                        <thead><tr><th>Recent query</th><th>Latency</th><th>Chunks</th><th>When</th></tr></thead>
+                        <tbody>${recentRows}</tbody>
+                    </table>` : '<p class="diag-empty">No questions asked yet.</p>'}
+            </div>`);
+
+        analyticsBody.innerHTML = sections.join('');
+    }
+
+    async function openDiagnostics() {
+        analyticsBody.innerHTML = '<p class="diag-empty">Loading…</p>';
+        analyticsModal.classList.remove('hidden');
+        try {
+            const res = await fetch('/analytics');
+            if (!res.ok) throw new Error('Failed to load analytics');
+            const data = await res.json();
+            renderAnalyticsSummary(data);
+            renderDiagnostics(data);
+        } catch (err) {
+            console.error(err);
+            analyticsBody.innerHTML = '<p class="diag-empty">Could not load diagnostics.</p>';
+        }
+    }
+
+    function closeDiagnostics() {
+        analyticsModal.classList.add('hidden');
+    }
+
+    if (analyticsMoreBtn) analyticsMoreBtn.addEventListener('click', openDiagnostics);
+    if (analyticsCloseBtn) analyticsCloseBtn.addEventListener('click', closeDiagnostics);
+    if (analyticsModal) {
+        analyticsModal.addEventListener('click', (e) => {
+            if (e.target === analyticsModal) closeDiagnostics();
+        });
+    }
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && analyticsModal && !analyticsModal.classList.contains('hidden')) {
+            closeDiagnostics();
+        }
+    });
 
     function renderDocuments(docs) {
         documentList.innerHTML = '';
@@ -182,14 +431,22 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (currentDocFilter === filename) {
                 currentDocFilter = null;
-                fetchDynamicFAQs(null);
             }
+            clearChat();
             fetchDocuments();
             fetchAnalytics();
+            fetchDynamicFAQs(currentDocFilter);
         } catch (err) {
             console.error(err);
             alert('Failed to delete document');
         }
+    }
+
+    function clearChat() {
+        // Remove only the message nodes: #empty-state and #faq-container are
+        // children of #chat-history and must survive so they can be re-shown.
+        chatHistory.querySelectorAll('.message').forEach(el => el.remove());
+        chatHistory.scrollTop = 0;
     }
 
     async function handleFileUpload(e) {

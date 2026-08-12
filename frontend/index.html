@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DocAIApp</title>
     <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=5">
+    <link rel="stylesheet" href="/static/style.css?v=6">
 </head>
 <body>
     <div class="app-container">
@@ -36,16 +36,33 @@
 
             <div class="sidebar-section" id="analytics-section">
                 <h3 class="section-title">ANALYTICS</h3>
-                <div class="analytics-card">
+                <div class="analytics-grid">
                     <div class="analytics-stat">
                         <span class="stat-value" id="stat-docs">0</span>
-                        <span class="stat-label">Documents</span>
+                        <span class="stat-label">Docs</span>
                     </div>
                     <div class="analytics-stat">
                         <span class="stat-value" id="stat-pages">0</span>
                         <span class="stat-label">Pages</span>
                     </div>
+                    <div class="analytics-stat">
+                        <span class="stat-value" id="stat-chunks">0</span>
+                        <span class="stat-label">Chunks</span>
+                    </div>
+                    <div class="analytics-stat">
+                        <span class="stat-value" id="stat-tokens">0</span>
+                        <span class="stat-label">Tokens</span>
+                    </div>
+                    <div class="analytics-stat">
+                        <span class="stat-value" id="stat-index">0</span>
+                        <span class="stat-label">Index</span>
+                    </div>
+                    <div class="analytics-stat">
+                        <span class="stat-value" id="stat-queries">0</span>
+                        <span class="stat-label">Queries</span>
+                    </div>
                 </div>
+                <button id="analytics-more" class="analytics-more">Index diagnostics &rarr;</button>
             </div>
 
             <div class="sidebar-section">
@@ -119,6 +136,17 @@
         </main>
     </div>
     
+    <!-- Index diagnostics modal -->
+    <div id="analytics-modal" class="modal-overlay hidden">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">Index Diagnostics</h3>
+                <button id="analytics-close" class="modal-close" title="Close">&times;</button>
+            </div>
+            <div class="modal-body" id="analytics-body"></div>
+        </div>
+    </div>
+
     <!-- Template for user message -->
     <template id="user-msg-template">
         <div class="message user-message">
@@ -155,6 +183,6 @@
 
     <!-- Script loaded at end -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="/static/script.js?v=4"></script>
+    <script src="/static/script.js?v=6"></script>
 </body>
 </html>

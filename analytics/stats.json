@@ -1,6 +1,8 @@
 {
-    "documents": {
-        "Leave_Policy_2026-27.pdf": 32,
-        "ULIP_FOIS_Integration_Requirement.pdf": 15
+    "documents": {},
+    "queries": [],
+    "query_totals": {
+        "count": 0,
+        "total_latency_ms": 0.0
     }
 }

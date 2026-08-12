@@ -98,6 +98,7 @@ def ask(question: str, vector_store: VectorStoreManager, doc_filter: Optional[st
                     "Try indexing more documents or rephrasing your query."
                 ),
                 "sources": [],
+                "chunk_count": 0,
             }
 
 
@@ -110,7 +111,9 @@ def ask(question: str, vector_store: VectorStoreManager, doc_filter: Optional[st
 
         sources = _extract_sources(docs)
 
-        return {"answer": answer, "sources": sources}
+        # chunk_count is the number of retrieved chunks, which is >= the
+        # number of sources because several chunks can share a filename.
+        return {"answer": answer, "sources": sources, "chunk_count": len(docs)}
 
     except Exception as exc:
         print(f"[ERROR] RAG chain failed: {exc}", file=sys.stderr)
@@ -120,6 +123,7 @@ def ask(question: str, vector_store: VectorStoreManager, doc_filter: Optional[st
                 f"Details: {exc}"
             ),
             "sources": [],
+            "chunk_count": 0,
         }
 
 def generate_faqs(vector_store: VectorStoreManager, doc_filter: Optional[str] = None) -> list[str]:

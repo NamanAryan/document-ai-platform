@@ -11,6 +11,7 @@ Endpoints
 """
 
 import os
+import time
 from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import Optional, Union
@@ -272,7 +273,12 @@ async def upload_document(background_tasks: BackgroundTasks, file: UploadFile = 
         }
         chunks = chunker.chunk(doc_data["text"], metadata)
         vs.add_documents(chunks)
-        _get_analytics().add_document(doc_data["filename"], doc_data.get("page_count", 0))
+        _get_analytics().add_document(
+            doc_data["filename"],
+            doc_data.get("page_count", 0),
+            file_type=doc_data.get("file_type", "?"),
+            size_bytes=file_path.stat().st_size,
+        )
         
         def generate_and_save_faq(filename: str):
             from generation.chain import generate_faqs
@@ -295,13 +301,97 @@ async def upload_document(background_tasks: BackgroundTasks, file: UploadFile = 
         raise HTTPException(status_code=500, detail=f"Failed to index file: {exc}")
 
 
+def _active_llm_description() -> dict:
+    """Describe the LLM actually in use, falling back to configured values."""
+    import generation.llm as llm_module
+
+    instance = getattr(llm_module, "_llm", None)
+    backend = type(instance).__name__ if instance is not None else "not initialised"
+
+    model = settings.ollama_model
+    if instance is not None:
+        # ChatOllama exposes .model; ChatGoogleGenerativeAI exposes .model too.
+        model = getattr(instance, "model", model) or model
+
+    return {
+        "backend": backend,
+        "model": model,
+        "temperature": getattr(instance, "temperature", None) if instance else None,
+    }
+
+
 @main.get("/analytics", tags=["Analytics"])
 async def get_analytics():
-    """Return the current document processing analytics."""
+    """Return detailed indexing, chunking and retrieval statistics."""
     vs = _get_vector_store()
     analytics = _get_analytics()
     analytics.sync(vs.list_indexed_documents())
-    return analytics.get_analytics()
+
+    doc_stats = analytics.get_analytics()
+    index = vs.stats()
+    per_doc_index = index.get("per_document", {})
+    llm_info = _active_llm_description()
+
+    # Merge the persisted document records with the live per-document
+    # chunk counts pulled from Chroma.
+    documents = []
+    for name, record in sorted(doc_stats["documents"].items()):
+        indexed = per_doc_index.get(name, {})
+        documents.append({
+            "filename": name,
+            "file_type": record.get("file_type") or indexed.get("file_type", "?"),
+            "pages": record.get("pages", 0),
+            "size_bytes": record.get("size_bytes", 0),
+            "indexed_at": record.get("indexed_at"),
+            "chunks": indexed.get("chunks", 0),
+            "characters": indexed.get("characters", 0),
+            "avg_chunk_chars": indexed.get("avg_chunk_chars", 0),
+        })
+
+    total_chunks = index.get("vector_count", 0)
+    total_docs = doc_stats["total_documents"]
+    total_chars = index.get("total_characters", 0)
+    chunk_size = settings.chunk_size
+    overlap = settings.chunk_overlap
+
+    return {
+        # Kept flat at the top level for backwards compatibility with any
+        # existing consumer of the original two-field response.
+        "total_documents": total_docs,
+        "total_pages": doc_stats["total_pages"],
+        "totals": {
+            "documents": total_docs,
+            "pages": doc_stats["total_pages"],
+            "chunks": total_chunks,
+            "characters": total_chars,
+            "tokens_est": round(total_chars / 4),
+            "source_bytes": doc_stats["total_bytes"],
+            "index_size_bytes": index.get("index_size_bytes", 0),
+            "avg_chunks_per_doc": round(total_chunks / total_docs, 1) if total_docs else 0,
+        },
+        "pipeline": {
+            "chunk_size": chunk_size,
+            "chunk_overlap": overlap,
+            "overlap_pct": round(overlap / chunk_size * 100, 1) if chunk_size else 0,
+            "top_k": settings.top_k_results,
+            "splitter": "RecursiveCharacterTextSplitter",
+            "separators": ["\\n\\n", "\\n", ". ", " ", ""],
+            "llm_backend": llm_info["backend"],
+            "llm_model": llm_info["model"],
+            "temperature": llm_info["temperature"],
+            "embedding_model": settings.ollama_embedding_model,
+            "embedding_dimensions": index.get("embedding_dimensions"),
+            "distance_metric": index.get("distance_metric"),
+            "collection": index.get("collection"),
+            "persist_dir": index.get("persist_dir"),
+        },
+        "chunking": {
+            "distribution": index.get("chunk_distribution"),
+            "histogram": index.get("chunk_histogram", []),
+        },
+        "documents": documents,
+        "queries": analytics.get_query_stats(),
+    }
 
 @main.get("/faq/dynamic", response_model=FAQResponse, tags=["Q&A"])
 async def get_dynamic_faqs(doc_filter: Optional[str] = None):
@@ -339,7 +429,16 @@ async def ask_question(request: AskRequest):
             detail="No documents indexed yet. Call POST /index first.",
         )
 
+    started = time.perf_counter()
     result = ask(request.question, vs, doc_filter=request.doc_filter)
+    _get_analytics().record_query(
+        request.question,
+        latency_ms=(time.perf_counter() - started) * 1000,
+        chunks_retrieved=result.get("chunk_count", 0),
+        sources=result.get("sources", []),
+        doc_filter=request.doc_filter,
+        answer_chars=len(result.get("answer", "")),
+    )
     return AskResponse(answer=result["answer"], sources=result["sources"])
 
 
@@ -407,11 +506,22 @@ async def ask_question_stream(request: AskRequest):
     chain = RAG_PROMPT | llm | StrOutputParser()
 
     async def token_generator():
+        started = time.perf_counter()
         full_answer = []
         for chunk in chain.stream({"context": context, "question": request.question}):
             full_answer.append(chunk)
             yield f"data: {json.dumps({'token': chunk})}\n\n"
+        answer = ''.join(full_answer)
         # Final event with complete answer and sources
-        yield f"data: {json.dumps({'done': True, 'answer': ''.join(full_answer), 'sources': sources})}\n\n"
+        yield f"data: {json.dumps({'done': True, 'answer': answer, 'sources': sources})}\n\n"
+
+        _get_analytics().record_query(
+            request.question,
+            latency_ms=(time.perf_counter() - started) * 1000,
+            chunks_retrieved=len(docs),
+            sources=sources,
+            doc_filter=request.doc_filter,
+            answer_chars=len(answer),
+        )
 
     return StreamingResponse(token_generator(), media_type="text/event-stream")
