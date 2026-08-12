@@ -23,6 +23,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from utils.config import settings
+from utils.errors import friendly_error
 from ingestion.embedder import active_embedding_model
 import logging
 
@@ -310,7 +311,8 @@ async def upload_document(background_tasks: BackgroundTasks, file: UploadFile = 
     except Exception as exc:
         file_path.unlink(missing_ok=True)
         logger.error(f"Failed to index {filename}: {exc}")
-        raise HTTPException(status_code=500, detail=f"Failed to index file: {exc}")
+        status, message = friendly_error(exc)
+        raise HTTPException(status_code=status, detail=message)
 
 
 def _active_llm_description() -> dict:
@@ -499,18 +501,31 @@ async def ask_question_stream(request: AskRequest):
             detail="No documents indexed yet. Call POST /index first.",
         )
 
-    docs = vs.similarity_search(request.question, doc_filter=request.doc_filter)
+    def single_event_stream(answer: str) -> StreamingResponse:
+        """Deliver one terminal SSE event — used for empty results and errors.
+
+        Reported as a normal 'done' event rather than an HTTP error so the
+        message lands in the chat bubble instead of breaking the stream.
+        """
+        payload = json.dumps({"done": True, "answer": answer, "sources": []})
+
+        async def gen():
+            yield f"data: {payload}\n\n"
+
+        return StreamingResponse(gen(), media_type="text/event-stream")
+
+    # Retrieval embeds the question, so this is the first call that can hit a
+    # provider quota limit.
+    try:
+        docs = vs.similarity_search(request.question, doc_filter=request.doc_filter)
+    except Exception as exc:
+        logger.error(f"Retrieval failed: {exc}")
+        return single_event_stream(friendly_error(exc)[1])
+
     logger.info(f"Found {len(docs)} documents for context")
 
     if not docs:
-        async def no_docs():
-            msg = json.dumps({
-                "done": True,
-                "answer": "No relevant documents were found for your question.",
-                "sources": [],
-            })
-            yield f"data: {msg}\n\n"
-        return StreamingResponse(no_docs(), media_type="text/event-stream")
+        return single_event_stream("No relevant documents were found for your question.")
 
     sources = _extract_sources(docs)
     context = _format_docs(docs)
@@ -520,9 +535,20 @@ async def ask_question_stream(request: AskRequest):
     async def token_generator():
         started = time.perf_counter()
         full_answer = []
-        for chunk in chain.stream({"context": context, "question": request.question}):
-            full_answer.append(chunk)
-            yield f"data: {json.dumps({'token': chunk})}\n\n"
+        try:
+            for chunk in chain.stream({"context": context, "question": request.question}):
+                full_answer.append(chunk)
+                yield f"data: {json.dumps({'token': chunk})}\n\n"
+        except Exception as exc:
+            # Quota can run out mid-answer. Close the stream cleanly, keeping
+            # whatever text arrived before the failure.
+            logger.error(f"Streaming failed: {exc}")
+            partial = ''.join(full_answer).strip()
+            notice = friendly_error(exc)[1]
+            answer = f"{partial}\n\n---\n\n{notice}" if partial else notice
+            yield f"data: {json.dumps({'done': True, 'answer': answer, 'sources': []})}\n\n"
+            return
+
         answer = ''.join(full_answer)
         # Final event with complete answer and sources
         yield f"data: {json.dumps({'done': True, 'answer': answer, 'sources': sources})}\n\n"

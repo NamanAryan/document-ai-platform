@@ -15,6 +15,7 @@ from langchain_core.documents import Document
 
 from generation.llm import get_llm
 from retrieval.vector_store import VectorStoreManager
+from utils.errors import friendly_error
 
 
 
@@ -116,15 +117,10 @@ def ask(question: str, vector_store: VectorStoreManager, doc_filter: Optional[st
         return {"answer": answer, "sources": sources, "chunk_count": len(docs)}
 
     except Exception as exc:
+        # Full detail to the log, one short sentence to the user.
         print(f"[ERROR] RAG chain failed: {exc}", file=sys.stderr)
-        return {
-            "answer": (
-                "Sorry, an error occurred while processing your question.  "
-                f"Details: {exc}"
-            ),
-            "sources": [],
-            "chunk_count": 0,
-        }
+        _, message = friendly_error(exc)
+        return {"answer": message, "sources": [], "chunk_count": 0}
 
 def generate_faqs(vector_store: VectorStoreManager, doc_filter: Optional[str] = None) -> list[str]:
     """Generate dynamic FAQs based on indexed documents."""

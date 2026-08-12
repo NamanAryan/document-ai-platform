@@ -16,6 +16,26 @@ document.addEventListener('DOMContentLoaded', () => {
     const API_BASE = (window.API_BASE || '').replace(/\/+$/, '');
     const apiUrl = (path) => `${API_BASE}${path}`;
 
+    // --- Keep-alive ------------------------------------------------------
+    // A Render free instance sleeps after ~15 minutes without inbound traffic
+    // and takes 50s+ to wake. Ping while the page is open so the next question
+    // does not pay that cost. Failures are swallowed: a keep-alive problem
+    // must never surface as a UI error.
+    const KEEPALIVE_MINUTES = Number(window.KEEPALIVE_MINUTES ?? 10);
+
+    function pingBackend() {
+        fetch(apiUrl('/health'), { cache: 'no-store' }).catch(() => {});
+    }
+
+    if (KEEPALIVE_MINUTES > 0) {
+        setInterval(pingBackend, KEEPALIVE_MINUTES * 60 * 1000);
+        // Background tabs get their timers throttled, so also ping whenever
+        // the tab comes back to the foreground.
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') pingBackend();
+        });
+    }
+
     // Load initial documents and analytics
     fetchDocuments();
     fetchAnalytics();
@@ -46,11 +66,15 @@ document.addEventListener('DOMContentLoaded', () => {
     async function fetchDocuments() {
         try {
             const res = await fetch(apiUrl('/documents'));
-            if (!res.ok) throw new Error('Failed to fetch documents');
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
             renderDocuments(data.documents);
         } catch (err) {
-            console.error(err);
+            // Surface this: a silent failure here looks like "no documents"
+            // and only shows up later as a confusing upload error.
+            console.error('Could not load documents:', err);
+            documentList.innerHTML =
+                '<li class="doc-item" style="cursor:default;color:#b4453c">API unreachable</li>';
         }
     }
 
@@ -454,6 +478,22 @@ document.addEventListener('DOMContentLoaded', () => {
         chatHistory.scrollTop = 0;
     }
 
+    function describeFailure(res, data) {
+        if (res.status === 429) return 'Quota exhausted. Please try again in a few minutes.';
+        if (data && data.detail) {
+            // Backend messages are already short; this only guards against an
+            // unmapped provider error dump reaching the sidebar.
+            const detail = String(data.detail);
+            return detail.length > 160 ? detail.slice(0, 157).trimEnd() + '…' : detail;
+        }
+        if (res.status === 502 || res.status === 503) {
+            return 'Server is waking up — wait ~30s and try again.';
+        }
+        if (res.status === 504) return 'Server timed out. Try a smaller file.';
+        if (res.status === 413) return 'File is too large for the server.';
+        return `Upload failed (HTTP ${res.status}).`;
+    }
+
     async function handleFileUpload(e) {
         const file = e.target.files[0];
         if (!file) return;
@@ -470,23 +510,33 @@ document.addEventListener('DOMContentLoaded', () => {
                 method: 'POST',
                 body: formData
             });
-            const data = await res.json();
-            
-            if (res.ok) {
-                uploadStatus.textContent = 'File indexed successfully.';
+
+            // A sleeping or restarting host answers with an HTML error page
+            // rather than JSON, so parse defensively — calling res.json()
+            // directly would throw and hide the real status code.
+            const raw = await res.text();
+            let data = null;
+            try { data = JSON.parse(raw); } catch (_) { /* not JSON */ }
+
+            if (res.ok && data) {
+                uploadStatus.textContent = data.message || 'File indexed successfully.';
                 uploadStatus.style.color = 'var(--success-color)';
                 fetchDocuments();
                 fetchAnalytics();
                 fetchDynamicFAQs(currentDocFilter);
             } else {
-                uploadStatus.textContent = data.detail || 'Upload failed';
+                uploadStatus.textContent = describeFailure(res, data);
                 uploadStatus.style.color = 'red';
+                console.error('Upload failed:', res.status, raw.slice(0, 500));
             }
         } catch (err) {
-            uploadStatus.textContent = 'Upload error';
+            // fetch() only rejects on network-level failures: the host is
+            // unreachable, or the browser blocked the response via CORS.
+            uploadStatus.textContent = `Cannot reach the API — is ${API_BASE || 'the backend'} up?`;
             uploadStatus.style.color = 'red';
+            console.error('Upload request never completed:', err);
         }
-        
+
         fileInput.value = '';
     }
 

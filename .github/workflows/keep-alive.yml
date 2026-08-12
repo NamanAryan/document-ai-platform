@@ -1,0 +1,43 @@
+name: Keep Render service awake
+
+# Render free instances spin down after ~15 minutes without inbound traffic,
+# and waking one costs 50s+ on the next request. Pinging every 10 minutes
+# keeps it warm with margin for GitHub's scheduler running late.
+#
+# COST WARNING: on a *private* repository every run is billed rounded up to a
+# full Actions minute, so this schedule costs ~4,300 min/month against a
+# 2,000-minute free quota. On a public repository it is free. If your repo is
+# private, delete this workflow and use an external pinger instead — see
+# DEPLOYMENT.md.
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+# Never let a slow cold start pile up overlapping runs.
+concurrency:
+  group: keep-alive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping health endpoint
+        env:
+          # Override without editing this file by setting a repository
+          # variable named RENDER_URL (Settings -> Secrets and variables ->
+          # Actions -> Variables).
+          TARGET: ${{ vars.RENDER_URL || 'https://docai-platform-api-9h3i.onrender.com' }}
+        run: |
+          echo "Pinging $TARGET/health"
+          code=$(curl -sS -o /dev/null -w '%{http_code}' \
+                   --max-time 120 --retry 2 --retry-delay 20 \
+                   "$TARGET/health")
+          echo "HTTP $code"
+          if [ "$code" != "200" ]; then
+            echo "::error::Health check returned $code"
+            exit 1
+          fi
