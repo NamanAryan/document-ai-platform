@@ -19,6 +19,8 @@ env/
 # =========================
 .env
 .env.*
+# ...but the template must be committed
+!.env.example
 
 # =========================
 # IDEs

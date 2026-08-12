@@ -11,6 +11,11 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentDocFilter = null;
     let isStreaming = false;
 
+    // Empty when FastAPI serves this page; set in config.js when the
+    // frontend is hosted separately (see frontend/config.js).
+    const API_BASE = (window.API_BASE || '').replace(/\/+$/, '');
+    const apiUrl = (path) => `${API_BASE}${path}`;
+
     // Load initial documents and analytics
     fetchDocuments();
     fetchAnalytics();
@@ -40,7 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function fetchDocuments() {
         try {
-            const res = await fetch('/documents');
+            const res = await fetch(apiUrl('/documents'));
             if (!res.ok) throw new Error('Failed to fetch documents');
             const data = await res.json();
             renderDocuments(data.documents);
@@ -69,7 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
         faqGrid.innerHTML = '';
         faqSpinner.classList.remove('hidden');
         
-        const url = docFilter ? '/faq/dynamic?doc_filter=' + encodeURIComponent(docFilter) : '/faq/dynamic';
+        const url = docFilter ? apiUrl('/faq/dynamic?doc_filter=' + encodeURIComponent(docFilter)) : apiUrl('/faq/dynamic');
         
         try {
             const res = await fetch(url);
@@ -141,7 +146,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function fetchAnalytics() {
         try {
-            const res = await fetch('/analytics');
+            const res = await fetch(apiUrl('/analytics'));
             if (res.ok) {
                 const data = await res.json();
                 renderAnalyticsSummary(data);
@@ -328,7 +333,7 @@ document.addEventListener('DOMContentLoaded', () => {
         analyticsBody.innerHTML = '<p class="diag-empty">Loading…</p>';
         analyticsModal.classList.remove('hidden');
         try {
-            const res = await fetch('/analytics');
+            const res = await fetch(apiUrl('/analytics'));
             if (!res.ok) throw new Error('Failed to load analytics');
             const data = await res.json();
             renderAnalyticsSummary(data);
@@ -421,7 +426,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function deleteDocument(filename) {
         try {
-            const res = await fetch(`/documents/${encodeURIComponent(filename)}`, {
+            const res = await fetch(apiUrl(`/documents/${encodeURIComponent(filename)}`), {
                 method: 'DELETE'
             });
             if (!res.ok) {
@@ -461,7 +466,7 @@ document.addEventListener('DOMContentLoaded', () => {
         uploadStatus.style.color = 'var(--text-muted)';
         
         try {
-            const res = await fetch('/upload', {
+            const res = await fetch(apiUrl('/upload'), {
                 method: 'POST',
                 body: formData
             });
@@ -513,7 +518,7 @@ document.addEventListener('DOMContentLoaded', () => {
         isStreaming = true;
         
         try {
-            const res = await fetch('/ask/stream', {
+            const res = await fetch(apiUrl('/ask/stream'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ question: text, doc_filter: currentDocFilter })

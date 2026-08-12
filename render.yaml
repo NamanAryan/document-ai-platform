@@ -1,0 +1,63 @@
+# Render blueprint for the DocAIApp backend.
+# Create the service from this file with: Render Dashboard -> New -> Blueprint.
+services:
+  - type: web
+    name: docai-platform-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:main --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+
+      # There is no Ollama server in the cloud, so both the chat model and
+      # the embedding model must use Gemini. Pinning these (rather than
+      # leaving them on "auto") also skips a pointless Ollama probe on every
+      # cold start.
+      - key: LLM_PROVIDER
+        value: gemini
+      - key: EMBEDDING_PROVIDER
+        value: gemini
+
+      # Set in the Render dashboard — never commit the key.
+      - key: GEMINI_API_KEY
+        sync: false
+
+      # Your Vercel origin, e.g. https://document-ai-platform.vercel.app
+      # Comma-separated for multiple origins (include preview URLs if needed).
+      - key: CORS_ALLOW_ORIGINS
+        sync: false
+
+      # Verify these model names against your API access and change them
+      # here if Google retires them — no code change required.
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash
+      - key: GEMINI_EMBEDDING_MODEL
+        value: gemini-embedding-2-preview
+
+      - key: CHUNK_SIZE
+        value: 500
+      - key: CHUNK_OVERLAP
+        value: 50
+      - key: TOP_K_RESULTS
+        value: 5
+
+      # WARNING: on the free plan these paths live on an ephemeral disk.
+      # Uploaded files and the vector index are wiped on every deploy,
+      # restart, and spin-down. See the persistent-disk block below.
+      - key: CHROMA_PERSIST_DIR
+        value: ./chroma_db
+      - key: DOCS_DIR
+        value: ./documents
+
+    # Persistent storage requires a paid instance type (free plans cannot
+    # mount disks). To keep uploads across restarts: raise `plan` above to
+    # `starter`, uncomment this block, and change the two paths above to
+    # /var/data/chroma_db and /var/data/documents.
+    #
+    # disk:
+    #   name: docai-data
+    #   mountPath: /var/data
+    #   sizeGB: 1

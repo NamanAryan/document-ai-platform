@@ -23,6 +23,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from utils.config import settings
+from ingestion.embedder import active_embedding_model
 import logging
 
 logging.basicConfig(
@@ -156,23 +157,34 @@ main = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — allow any origin for local development
+# CORS — "*" for local development; a split frontend/backend deployment
+# should set CORS_ALLOW_ORIGINS to the frontend origin.  Credentials cannot
+# be combined with a wildcard origin, so they are enabled only when the
+# allowed origins are named explicitly.
+_allow_wildcard = "*" in settings.cors_allow_origins
 main.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=settings.cors_allow_origins,
+    allow_credentials=not _allow_wildcard,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+logger.info(f"CORS allowed origins: {settings.cors_allow_origins}")
 
-# Serve the frontend static files (CSS, JS)
+# Serve the frontend static files (CSS, JS).  These are optional: when the
+# frontend is hosted separately (Vercel) the backend is API-only.
 FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
-main.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+FRONTEND_AVAILABLE = (FRONTEND_DIR / "index.html").exists()
+
+if FRONTEND_AVAILABLE:
+    main.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 
 
 @main.get("/", include_in_schema=False)
 async def serve_frontend():
-    """Serve the frontend index.html at the root URL."""
+    """Serve the frontend index.html, or a pointer to the docs if API-only."""
+    if not FRONTEND_AVAILABLE:
+        return {"service": "DocAIApp API", "docs": "/docs", "health": "/health"}
     return FileResponse(str(FRONTEND_DIR / "index.html"))
 
 
@@ -379,7 +391,7 @@ async def get_analytics():
             "llm_backend": llm_info["backend"],
             "llm_model": llm_info["model"],
             "temperature": llm_info["temperature"],
-            "embedding_model": settings.ollama_embedding_model,
+            "embedding_model": active_embedding_model(),
             "embedding_dimensions": index.get("embedding_dimensions"),
             "distance_metric": index.get("distance_metric"),
             "collection": index.get("collection"),

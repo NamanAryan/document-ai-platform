@@ -1,42 +1,40 @@
 """
-generation/llm.py — LLM initialisation with Ollama primary and Gemini fallback.
+generation/llm.py — Chat model initialisation for Ollama or Google Gemini.
 
-Exposes a module-level ``llm`` object that other modules can import
-directly:
+Exposes a single accessor that other modules import:
 
     from generation.llm import get_llm
+
+Which backend is used depends on ``LLM_PROVIDER`` (see ``utils.providers``).
+Pin it to ``gemini`` in a cloud deployment so start-up does not waste time
+probing an Ollama server that will never answer.
 """
 
 import sys
-from utils.config import settings
 
-# Cached singleton — avoids re-pinging Ollama on every request
+from utils.config import settings
+from utils.providers import resolve_provider
+
+# Cached singleton — avoids re-pinging the backend on every request.
 _llm = None
 
 
 def get_llm():
-    """Initialise and return a LangChain chat LLM (cached after first call).
-
-    Strategy:
-    1. Try to connect to the local Ollama server.  If it responds,
-       return a ``ChatOllama`` instance.
-    2. If Ollama is unreachable, fall back to Google Gemini
-       (``ChatGoogleGenerativeAI``).  Raises ``RuntimeError`` when the
-       Gemini API key is also missing.
+    """Initialise and return a LangChain chat model (cached after first call).
 
     Returns:
         A LangChain ``BaseChatModel`` instance.
+
+    Raises:
+        RuntimeError: If no backend is configured or reachable.
     """
     global _llm
     if _llm is not None:
         return _llm
 
-    try:
-        import ollama as ollama_sdk
+    provider = resolve_provider(settings.llm_provider, "LLM")
 
-        client = ollama_sdk.Client(host=settings.ollama_base_url)
-        client.list()
-
+    if provider == "ollama":
         from langchain_ollama import ChatOllama
 
         _llm = ChatOllama(
@@ -50,30 +48,17 @@ def get_llm():
             f"·  base_url={settings.ollama_base_url}",
             file=sys.stderr,
         )
-        return _llm
+    else:
+        from langchain_google_genai import ChatGoogleGenerativeAI
 
-    except Exception as exc:
+        _llm = ChatGoogleGenerativeAI(
+            model=settings.gemini_model,
+            google_api_key=settings.gemini_api_key,
+            temperature=0.2,
+        )
         print(
-            f"[LLM] Ollama unreachable ({exc}). "
-            "Attempting Gemini fallback …",
+            f"[LLM] Using Google Gemini  ·  model={settings.gemini_model}",
             file=sys.stderr,
         )
 
-    try:
-        api_key = settings.gemini_api_key
-    except ValueError as exc:
-        raise RuntimeError(
-            "Neither Ollama nor Gemini is available.  "
-            "Start Ollama or set GEMINI_API_KEY in your .env file."
-        ) from exc
-
-    from langchain_google_genai import ChatGoogleGenerativeAI
-
-    _llm = ChatGoogleGenerativeAI(
-        model="gemini-pro",
-        google_api_key=api_key,
-        temperature=0.2,
-    )
-    print("[LLM] Using Google Gemini (fallback)  ·  model=gemini-pro", file=sys.stderr)
     return _llm
-
