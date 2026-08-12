@@ -11,4 +11,4 @@
  *
  * The backend must also list this page's origin in CORS_ALLOW_ORIGINS.
  */
-window.API_BASE = "";
+window.API_BASE = "https://docai-platform-api-9h3i.onrender.com";
