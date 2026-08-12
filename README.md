@@ -252,10 +252,10 @@ This project provided hands-on experience with:
 
 ## Author
 
-**Alona Singh**
+**Alona Singh & Naman Aryan**
 
 B.Tech Information Technology
 
 Manipal Institute of Technology
-
-GitHub: https://github.com/alonasingh
+ 
+GitHub: https://github.com/alonasingh https://github.com/NamanAryan
